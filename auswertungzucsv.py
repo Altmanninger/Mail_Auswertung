@@ -13,6 +13,7 @@ FOLDER = 'INBOX'  # Oder z.B. 'Archiv' etc.
 
 # Extraktionsmuster wie im vorherigen Beispiel
 patterns = {
+    'Mail-Typ': '',  # Wird später gesetzt
     'Anmeldedatum': r'ANMELDUNG am:\s*([^\n]+)',
     'Name': r'Name:\s*([^\n]+)',
     'Geburtsdatum': r'Geburtsdatum:\s*([^\n]+)',
