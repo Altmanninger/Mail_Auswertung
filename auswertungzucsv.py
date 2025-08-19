@@ -11,10 +11,10 @@ EMAIL_ACCOUNT = 'web1548p1'
 PASSWORD = 'mpEUPtGX'
 FOLDER = 'INBOX'  # Oder z.B. 'Archiv' etc.
 
-# Extraktionsmuster wie im vorherigen Beispiel
+# Extraktionsmuster erweitert für alle Mail-Typ-Varianten
 patterns = {
     'Mail-Typ': '',  # Wird später gesetzt
-    'Anmeldedatum': r'ANMELDUNG am:\s*([^\n]+)',
+    'Anmeldedatum': r'(?:ANMELDUNG\s*AKTUALISIERUNG|ANMELDUNG|AKTUALISIERUNG|ABMELDUNG) am:\s*([^\n]+)',
     'Name': r'Name:\s*([^\n]+)',
     'Geburtsdatum': r'Geburtsdatum:\s*([^\n]+)',
     'Verantwortliche': r'Verantwortliche bei Jugendlichen:\s*([^\n]+)',
@@ -33,9 +33,12 @@ def remove_html_tags(text):
     # Entfernt alle HTML-Tags mit einem Regex
     return re.sub(r'<[^>]+>', '', text)
 
-def extract_fields(body):
+def extract_fields(body, mail_type):
     data = {}
+    data['Mail-Typ'] = mail_type  # Mail-Typ hinzufügen
     for key, pattern in patterns.items():
+        if key == 'Mail-Typ':
+            continue  # Bereits gesetzt
         match = re.search(pattern, body)
         value = match.group(1).strip() if match else ""
         value = remove_html_tags(value)  # HTML-Tags entfernen
@@ -75,6 +78,20 @@ def decode_subject(subject):
             subject_parts.append(part)
     return ''.join(subject_parts)
 
+def determine_mail_type(subject):
+    """Bestimmt den Mail-Typ basierend auf dem Betreff"""
+    subject_upper = subject.upper()
+    if 'ANMELDUNG' in subject_upper and 'AKTUALISIERUNG' in subject_upper:
+        return 'ANMELDUNG AKTUALISIERUNG'
+    elif 'ANMELDUNG' in subject_upper:
+        return 'ANMELDUNG'
+    elif 'AKTUALISIERUNG' in subject_upper:
+        return 'AKTUALISIERUNG'
+    elif 'ABMELDUNG' in subject_upper:
+        return 'ABMELDUNG'
+    else:
+        return 'UNBEKANNT'
+
 def main():
     try:
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
@@ -84,8 +101,8 @@ def main():
         print(f"Fehler beim Verbinden mit dem Mailserver: {e}")
         sys.exit(1)
 
-    # Nur E-Mails mit Betreff "ANMELDUNG beim Turnverein Gmunden 1861"
-    status, messages = mail.search(None, '(SUBJECT "ANMELDUNG")')
+    # E-Mails mit ANMELDUNG, AKTUALISIERUNG oder ABMELDUNG im Betreff
+    status, messages = mail.search(None, '(OR (OR (SUBJECT "ANMELDUNG") (SUBJECT "AKTUALISIERUNG")) (SUBJECT "ABMELDUNG"))')
     if status != "OK":
         print("Fehler beim Suchen der Mails.")
         return
@@ -103,9 +120,13 @@ def main():
             continue
         msg = email.message_from_bytes(msg_data[0][1])
 
+        # Betreff dekodieren und Mail-Typ bestimmen
+        subject = decode_subject(msg.get("Subject", ""))
+        mail_type = determine_mail_type(subject)
+
         body = get_body(msg)
         if body:
-            data = extract_fields(body)
+            data = extract_fields(body, mail_type)
             rows.append(data)
         else:
             print(f"Keine lesbare Mail bei ID {num}")
