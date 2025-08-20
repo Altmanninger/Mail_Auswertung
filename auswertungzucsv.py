@@ -4,12 +4,16 @@ from email.header import decode_header
 import re
 import csv
 import sys
+import os
+from dotenv import load_dotenv
 
-# IMAP-Login-Daten anpassen!
-IMAP_SERVER = 'alfa3094.alfahosting-server.de'
-EMAIL_ACCOUNT = 'web1548p1'
-PASSWORD = 'mpEUPtGX'
-FOLDER = 'INBOX'  # Oder z.B. 'Archiv' etc.
+# Umgebungsvariablen aus .env laden
+load_dotenv()
+
+IMAP_SERVER = os.getenv('IMAP_SERVER')
+EMAIL_ACCOUNT = os.getenv('EMAIL_ACCOUNT')
+PASSWORD = os.getenv('PASSWORD')
+FOLDER = os.getenv('FOLDER', 'INBOX')  # Default: INBOX
 
 # Extraktionsmuster erweitert für alle Mail-Typ-Varianten
 patterns = {
@@ -22,7 +26,7 @@ patterns = {
     'Telefon-Mobil': r'Telefon-Mobil:\s*([^\n,]*)',
     'Telefon-Festnetz': r'Telefon-Festnetz:\s*([^\n]*)',
     'E-Mail': r'E-Mail:\s*([^\n]+)',
-    'Bemerkungen': r'Bemerkung\(en\):\s*([^\n]*)',
+    'Bemerkungen': r'Bemerkung\(en\):\s*(.*?)(?=Datenschutz-Grundverordnung:|$)',
     'DSGVO': r'Datenschutz-Grundverordnung:\s*([^\n]*)',
     'Turnstunde 1': r'1\.Turnstunde:\s*([^\n]*)',
     'Turnstunde 2': r'2\.Turnstunde:\s*([^\n]*)',
@@ -39,9 +43,16 @@ def extract_fields(body, mail_type):
     for key, pattern in patterns.items():
         if key == 'Mail-Typ':
             continue  # Bereits gesetzt
-        match = re.search(pattern, body)
+        if key == 'Bemerkungen':
+            # Für Bemerkungen DOTALL verwenden, damit . auch \n matcht
+            match = re.search(pattern, body, re.DOTALL)
+        else:
+            match = re.search(pattern, body)
         value = match.group(1).strip() if match else ""
         value = remove_html_tags(value)  # HTML-Tags entfernen
+        # Mehrfache Leerzeichen und Zeilenwechsel durch einzelne Leerzeichen ersetzen
+        if key == 'Bemerkungen':
+            value = re.sub(r'\s+', ' ', value).strip()
         data[key] = value
     return data
 
